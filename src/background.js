@@ -1,43 +1,49 @@
 'use strict'
 let stateAllTabs = false;
 
-chrome.commands.onCommand.addListener(command => {
-	switch (command) {
-		case "mute_tab_current":
-			chrome.tabs.getSelected(null, tab => {
-				chrome.tabs.update(tab.id, {muted: !tab.mutedInfo.muted});
-			});
-			break;
+chrome.commands.onCommand.addListener(async (command) => {
+	try {
+		switch (command) {
+			case "mute_tab_current":
+				const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+				if (currentTab) {
+					await chrome.tabs.update(currentTab.id, { muted: !currentTab.mutedInfo.muted });
+				}
+				break;
 
-		case "mute_tab_all":
-			stateAllTabs = !stateAllTabs;
-			chrome.windows.getAll({populate: true}, windowList => {
-				windowList.forEach(window => {
-					window.tabs.forEach(tab => {
+			case "mute_tab_all":
+				stateAllTabs = !stateAllTabs;
+				const windows = await chrome.windows.getAll({ populate: true });
+				for (const window of windows) {
+					for (const tab of window.tabs) {
 						if (tab.audible || tab.mutedInfo.muted) {
-							chrome.tabs.update(tab.id, {muted: stateAllTabs});
+							await chrome.tabs.update(tab.id, { muted: stateAllTabs });
 						}
-					});
-				});
-			});
-			break;
+					}
+				}
+				break;
 
-		case "mute_tab_all_except_current":
-			chrome.windows.getAll({populate: true}, windowList => {
-				windowList.forEach(window => {
-					window.tabs.forEach(tab => {
+			case "mute_tab_all_except_current":
+				const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+				const allWindows = await chrome.windows.getAll({ populate: true });
+				
+				for (const window of allWindows) {
+					for (const tab of window.tabs) {
 						if (tab.audible) {
-							chrome.tabs.update(tab.id, {muted: true})
+							await chrome.tabs.update(tab.id, { muted: true });
 						}
-					});
-				});
-			});
-			chrome.tabs.getSelected(null, tab => {
-				chrome.tabs.update(tab.id, {muted: false});
-			});
-			break;
+					}
+				}
+				
+				if (activeTab) {
+					await chrome.tabs.update(activeTab.id, { muted: false });
+				}
+				break;
 
-		default:
-			break;
+			default:
+				break;
+		}
+	} catch (error) {
+		console.error('Error in command handler:', error);
 	}
 });
